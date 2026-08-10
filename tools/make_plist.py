@@ -7,11 +7,24 @@ regenerated after hand-edits in Alfred's editor drift from intent.
   python3 tools/make_plist.py
 """
 
+import os
 import pathlib
 import plistlib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / "src" / "info.plist"
+
+
+def workflow_version():
+    """Alfred shows this in its workflow list, so releases must not all claim 1.0.0.
+
+    The release job sets WORKFLOW_VERSION from the git tag. Local builds fall back to
+    the VERSION file, so an ordinary ./build.sh never churns src/info.plist.
+    """
+    override = os.environ.get("WORKFLOW_VERSION", "").strip()
+    if override:
+        return override
+    return (ROOT / "VERSION").read_text(encoding="utf-8").strip()
 
 # Stable uids: regenerating must not orphan connections or reshuffle the canvas.
 HOTKEY = "1B1A0F7C-9E2D-4F55-9C31-2A6D0C4E7A01"
@@ -124,7 +137,7 @@ workflow = {
     "description": "Strip terminal artifacts from text copied out of Claude Code.",
     "createdby": "serubin",
     "webaddress": "",
-    "version": "1.0.0",
+    "version": workflow_version(),
     "category": "Tools",
     "disabled": False,
     "readme": README,
@@ -174,7 +187,7 @@ workflow = {
 def main():
     with open(OUT, "wb") as f:
         plistlib.dump(workflow, f)
-    print(f"wrote {OUT.relative_to(ROOT)}")
+    print(f"wrote {OUT.relative_to(ROOT)} (version {workflow['version']})")
 
 
 if __name__ == "__main__":

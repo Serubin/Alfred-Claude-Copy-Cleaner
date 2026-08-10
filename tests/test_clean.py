@@ -10,8 +10,10 @@ readable message rather than a byte diff.
 
 import os
 import pathlib
+import stat
 import subprocess
 import sys
+import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -187,6 +189,23 @@ class CliTests(unittest.TestCase):
             env=environ,
         )
 
+    def run_cli_capturing_clipboard(self, args, stdin="", env=None):
+        """Run with a stub clipboard, returning (proc, what_was_copied_or_None).
+
+        Keeps the suite off the real pbcopy — which would clobber the developer's
+        clipboard and does not exist on Linux CI — while still asserting on what the
+        copy path actually wrote.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            copied = pathlib.Path(tmp) / "copied.txt"
+            stub = pathlib.Path(tmp) / "pbcopy"
+            stub.write_text(f'#!/bin/sh\ncat > "{copied}"\n')
+            stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
+            environ = {"CC_PBCOPY": str(stub)}
+            environ.update(env or {})
+            proc = self.run_cli(args, stdin, environ)
+            return proc, (copied.read_text() if copied.exists() else None)
+
     def test_stdin_to_stdout(self):
         proc = self.run_cli([], "⏺ hello world\n")
         self.assertEqual(proc.returncode, 0)
@@ -220,10 +239,15 @@ class CliTests(unittest.TestCase):
             self.assertIn(rule, proc.stdout.decode())
 
     def test_stats_reports_summary_not_text(self):
-        proc = self.run_cli(["--stats"], "⏺ Read(a.ts)\nsome secret text\n")
+        proc, copied = self.run_cli_capturing_clipboard(
+            ["--stats"], "⏺ Read(a.ts)\nsome private text\n"
+        )
         out = proc.stdout.decode()
         self.assertIn("Cleaned", out)
-        self.assertNotIn("some secret text", out)
+        # Alfred expands {placeholders} in whatever comes back on stdout, so the text
+        # must reach the clipboard and only the summary may reach Alfred.
+        self.assertNotIn("some private text", out)
+        self.assertEqual(copied, "some private text")
 
     def test_stats_on_empty_input_leaves_clipboard_alone(self):
         # Guards the hotkey path: cleaning an empty clipboard must not wipe it.

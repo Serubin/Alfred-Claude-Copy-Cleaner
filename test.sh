@@ -4,7 +4,8 @@
 #
 #   ./test.sh
 #
-# The differential test needs node; the workflow itself needs only Python.
+# Needs only Python 3. Re-verifying against the live reference implementation
+# additionally needs node — see the README.
 
 set -eu
 
