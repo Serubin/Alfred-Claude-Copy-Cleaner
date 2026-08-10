@@ -1,0 +1,23 @@
+Looking into the flaky migration test now. It only fails on CI, which usually points at ordering rather than the migration itself, so the first thing worth checking is whether the fixtures are seeded in a deterministic order.
+
+What Is Going On
+
+The seed file inserts accounts in whatever order the hash happens to iterate, and the test asserts on the first row it reads back. Locally the hash order is stable across runs, so the assertion passes and nobody notices:
+
+  ACCOUNTS.each do |slug, attrs|
+    Account.create!(slug: slug, **attrs)
+  end
+end
+
+Worth remembering: a test that depends on insertion order is not flaky, it is wrong. CI just happens to be the place that tells you.
+
+1. Make it deterministic
+  a. Sort the seed data by slug before inserting
+  b. Assert on a specific slug rather than the first row
+    i. Update the two account assertions
+    ii. Re-run the suite with a shuffled seed
+2. Then harden it
+  a. Turn on random test ordering locally so this surfaces sooner
+
+Reproduce the failure with a fixed seed
+Sort the seed data

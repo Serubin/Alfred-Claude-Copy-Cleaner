@@ -1,0 +1,20 @@
+﻿·﻿
+﻿╭──────────────╮
+
+
+
+
+· progressdone… and more text
+
+⏺ Read(src/a.ts)trailing
+⏺ Läsa(src/a.ts)
+
+  ٤٢→ const x = 1;
+
+A wrapped line long enough to be a rejoin candidate
+
+
+⏺ A normal sentence so the file is not purely pathological.
+
+Another wrapped line ending in an odd whitespace char
+continuation text that gets merged onto it

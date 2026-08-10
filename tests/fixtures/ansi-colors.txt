@@ -1,0 +1,3 @@
+[1m[38;5;208m⏺[0m The index rebuild [32mfinished[0m in 41s.
+[2K[1G  Re-ran it against the replica and the row counts line up now.
+[90m  ⎿  Ran 6 queries (ctrl+o to expand)[0m

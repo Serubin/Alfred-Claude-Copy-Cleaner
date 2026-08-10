@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>bundleid</key>
+	<string>net.serubin.alfred.claude-code-paste-cleaner</string>
+	<key>category</key>
+	<string>Tools</string>
+	<key>connections</key>
+	<dict>
+		<key>1B1A0F7C-9E2D-4F55-9C31-2A6D0C4E7A01</key>
+		<array>
+			<dict>
+				<key>destinationuid</key>
+				<string>3D3C2F9E-6A4F-4B77-7E53-4C8F2E6A9C03</string>
+				<key>modifiers</key>
+				<integer>0</integer>
+				<key>modifiersubtext</key>
+				<string></string>
+				<key>vitoclose</key>
+				<false/>
+			</dict>
+		</array>
+		<key>2C2B1E8D-7F3E-4A66-8D42-3B7E1D5F8B02</key>
+		<array>
+			<dict>
+				<key>destinationuid</key>
+				<string>3D3C2F9E-6A4F-4B77-7E53-4C8F2E6A9C03</string>
+				<key>modifiers</key>
+				<integer>0</integer>
+				<key>modifiersubtext</key>
+				<string></string>
+				<key>vitoclose</key>
+				<false/>
+			</dict>
+		</array>
+		<key>3D3C2F9E-6A4F-4B77-7E53-4C8F2E6A9C03</key>
+		<array>
+			<dict>
+				<key>destinationuid</key>
+				<string>4E4D3A0F-5B5A-4C88-6F64-5D9A3F7B0D04</string>
+				<key>modifiers</key>
+				<integer>0</integer>
+				<key>modifiersubtext</key>
+				<string></string>
+				<key>vitoclose</key>
+				<false/>
+			</dict>
+		</array>
+		<key>4E4D3A0F-5B5A-4C88-6F64-5D9A3F7B0D04</key>
+		<array/>
+	</dict>
+	<key>createdby</key>
+	<string>serubin</string>
+	<key>description</key>
+	<string>Strip terminal artifacts from text copied out of Claude Code.</string>
+	<key>disabled</key>
+	<false/>
+	<key>name</key>
+	<string>Claude Code Paste Cleaner</string>
+	<key>objects</key>
+	<array>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>action</key>
+				<integer>0</integer>
+				<key>argument</key>
+				<integer>0</integer>
+				<key>focusedappvariable</key>
+				<false/>
+				<key>focusedappvariablename</key>
+				<string></string>
+				<key>leftcursor</key>
+				<false/>
+				<key>modsmode</key>
+				<integer>0</integer>
+				<key>relatedAppsMode</key>
+				<integer>0</integer>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.trigger.hotkey</string>
+			<key>uid</key>
+			<string>1B1A0F7C-9E2D-4F55-9C31-2A6D0C4E7A01</string>
+			<key>version</key>
+			<integer>2</integer>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>acceptsfiles</key>
+				<false/>
+				<key>acceptsmulti</key>
+				<integer>0</integer>
+				<key>acceptstext</key>
+				<true/>
+				<key>acceptsurls</key>
+				<false/>
+				<key>name</key>
+				<string>Clean Claude Code Text</string>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.trigger.universalaction</string>
+			<key>uid</key>
+			<string>2C2B1E8D-7F3E-4A66-8D42-3B7E1D5F8B02</string>
+			<key>version</key>
+			<integer>1</integer>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>concurrently</key>
+				<false/>
+				<key>escaping</key>
+				<integer>0</integer>
+				<key>script</key>
+				<string>#!/bin/zsh --no-rcs
+
+for candidate in /usr/bin/python3 /opt/homebrew/bin/python3 /usr/local/bin/python3; do
+  if [[ -x $candidate ]]; then
+    PY=$candidate
+    break
+  fi
+done
+: ${PY:=python3}
+
+# CC_PBPASTE/CC_PBCOPY are test seams; unset, they are the real clipboard.
+if [[ -n "$1" ]]; then
+  printf '%s' "$1"
+else
+  "${CC_PBPASTE:-/usr/bin/pbpaste}"
+fi | "$PY" clean_claude_text.py --stats
+</string>
+				<key>scriptargtype</key>
+				<integer>1</integer>
+				<key>scriptfile</key>
+				<string></string>
+				<key>type</key>
+				<integer>11</integer>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.action.script</string>
+			<key>uid</key>
+			<string>3D3C2F9E-6A4F-4B77-7E53-4C8F2E6A9C03</string>
+			<key>version</key>
+			<integer>2</integer>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>lastpathcomponent</key>
+				<false/>
+				<key>onlyshowifquerypopulated</key>
+				<true/>
+				<key>removeextension</key>
+				<false/>
+				<key>text</key>
+				<string>{query}</string>
+				<key>title</key>
+				<string>{const:alfred_workflow_name}</string>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.output.notification</string>
+			<key>uid</key>
+			<string>4E4D3A0F-5B5A-4C88-6F64-5D9A3F7B0D04</string>
+			<key>version</key>
+			<integer>1</integer>
+		</dict>
+	</array>
+	<key>readme</key>
+	<string>Cleans text copied out of the Claude Code terminal UI: message bullets (the ⏺ and ⎿ markers), box-drawing borders, ANSI colour and hyperlink escapes, line-number gutters, spinner and shortcut-hint chrome, and terminal hard-wrapping.
+
+Two ways in:
+
+  • Hotkey — cleans whatever is on the clipboard and puts the result back, so you just paste. No hotkey is assigned on import; set one in the workflow editor.
+  • Universal Action — select text anywhere, then "Clean Claude Code Text".
+
+A notification reports what changed. If the result would be empty the clipboard is left untouched.
+
+This is a plain-text cleaner: it strips artifacts rather than rebuilding markdown.</string>
+	<key>uidata</key>
+	<dict>
+		<key>1B1A0F7C-9E2D-4F55-9C31-2A6D0C4E7A01</key>
+		<dict>
+			<key>xpos</key>
+			<integer>40</integer>
+			<key>ypos</key>
+			<integer>40</integer>
+		</dict>
+		<key>2C2B1E8D-7F3E-4A66-8D42-3B7E1D5F8B02</key>
+		<dict>
+			<key>xpos</key>
+			<integer>40</integer>
+			<key>ypos</key>
+			<integer>190</integer>
+		</dict>
+		<key>3D3C2F9E-6A4F-4B77-7E53-4C8F2E6A9C03</key>
+		<dict>
+			<key>xpos</key>
+			<integer>300</integer>
+			<key>ypos</key>
+			<integer>110</integer>
+		</dict>
+		<key>4E4D3A0F-5B5A-4C88-6F64-5D9A3F7B0D04</key>
+		<dict>
+			<key>xpos</key>
+			<integer>560</integer>
+			<key>ypos</key>
+			<integer>110</integer>
+		</dict>
+	</dict>
+	<key>userconfigurationconfig</key>
+	<array>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>default</key>
+				<true/>
+				<key>required</key>
+				<false/>
+				<key>text</key>
+				<string></string>
+			</dict>
+			<key>description</key>
+			<string>Merge lines the terminal wrapped back into paragraphs. Turn off to keep the original line breaks.</string>
+			<key>label</key>
+			<string>Undo terminal hard wrapping</string>
+			<key>type</key>
+			<string>checkbox</string>
+			<key>variable</key>
+			<string>cc_reflow</string>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>default</key>
+				<true/>
+				<key>required</key>
+				<false/>
+				<key>text</key>
+				<string></string>
+			</dict>
+			<key>description</key>
+			<string>Convert “ ” ‘ ’ to straight ASCII quotes.</string>
+			<key>label</key>
+			<string>Curly quotes to ASCII</string>
+			<key>type</key>
+			<string>checkbox</string>
+			<key>variable</key>
+			<string>cc_smart_quotes</string>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>default</key>
+				<true/>
+				<key>required</key>
+				<false/>
+				<key>text</key>
+				<string></string>
+			</dict>
+			<key>description</key>
+			<string>Report how much was removed after each clean.</string>
+			<key>label</key>
+			<string>Show a notification</string>
+			<key>type</key>
+			<string>checkbox</string>
+			<key>variable</key>
+			<string>cc_notify</string>
+		</dict>
+	</array>
+	<key>variablesdontexport</key>
+	<array/>
+	<key>version</key>
+	<string>1.0.0</string>
+	<key>webaddress</key>
+	<string></string>
+</dict>
+</plist>

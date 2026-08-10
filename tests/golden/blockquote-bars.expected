@@ -1,0 +1,5 @@
+Retention is handled in one place only: the nightly compaction job. Nothing else in the pipeline deletes rows.
+ ▎
+ (1) The job reads the retention window from the workspace settings table. (2) It selects candidate partitions older than that window, oldest first, and takes an advisory lock on each one so a second runner cannot pick up the same partition. (3) Before anything is dropped it writes a manifest row recording the partition name, the row count, and the settings version that was in effect, so the decision can be reconstructed later. (4) Partitions still referenced by an open export job are skipped and retried on the next pass rather than blocking the run. (5) Only then is the partition dropped, and the manifest row is marked applied in the same transaction, so a crash mid-run can never leave a partition dropped without a record of why.
+ ▎
+ The job is idempotent and safe to run twice; a second pass finds no candidates and exits without touching anything.

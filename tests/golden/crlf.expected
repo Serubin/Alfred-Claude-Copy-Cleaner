@@ -1,0 +1,1 @@
+The nightly job retried twice before it finally completed and the second attempt skipped the locked partitions.

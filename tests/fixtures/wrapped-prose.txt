@@ -1,0 +1,17 @@
+⏺ The root cause is that the worker pool is sized for the old
+  single-tenant deployment, so under the new traffic pattern it
+  saturates almost immediately and jobs queue behind it.
+
+  Options:
+  - Raise the worker count to 64, which is the quickest change and
+    matches what the staging environment already runs with today
+  - Shard the queue per tenant
+
+  ```ts
+  const workers = createPool({
+    max: 64,
+  });
+  ```
+
+  Short line.
+  Another short one.

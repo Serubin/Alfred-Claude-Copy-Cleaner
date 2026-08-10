@@ -1,0 +1,8 @@
+dist/
+__pycache__/
+*.pyc
+
+# Third-party test oracle: the cleaning routine extracted from trevorfox.com's
+# bundle. Never committed — regenerate locally with tools/extract_reference.mjs.
+# See "Relationship to the original tool" in the README.
+tests/reference.mjs

@@ -1,0 +1,9 @@
+⏺ Update(db/seeds/accounts.rb)
+  ⎿  Updated db/seeds/accounts.rb with 3 additions and 1 removal
+     51 -  ACCOUNTS.each do |slug, attrs|
+     52 +  ACCOUNTS.sort.each do |slug, attrs|
+     53 +    # deterministic order keeps the assertions honest
+     54 +    next if Account.exists?(slug: slug)
+
+  1	require "active_record"
+  2	load Rails.root.join("db/seeds.rb")
