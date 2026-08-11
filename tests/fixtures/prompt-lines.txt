@@ -1,0 +1,13 @@
+❯ /tasks-workflow Please review the presentation jobs for any areas that could be
+  optimised. The goal is to reduce compute cost, so rank the most impactful first,
+  propose a fix, then implement it.
+──────────────────────────────────────────────────────────────────────────────────
+
+⏺ Ready to run the first change?
+
+❯ 1. Yes, proceed
+  2. No, tell Claude what to do differently
+
+❯
+
+⏺ Starting with the largest job.
