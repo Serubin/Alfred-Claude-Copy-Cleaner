@@ -73,7 +73,6 @@ CHROME = [
     re.compile(r"\(ctrl\+[A-Za-z0-9_]+( again)? to (expand|edit|view|see|toggle)", re.I),
     re.compile(rf"^{S}*⎿{S}*Interrupted"),
     re.compile(rf"^{S}*\? for shortcuts"),
-    re.compile(rf"^{S}*❯"),
     re.compile(rf"^{S}*[·✢✳✶✻✽]{S}*\Z"),
     re.compile(rf"^{S}*✻ Welcome to Claude Code"),
     re.compile(r"shift\+tab to cycle", re.I),
@@ -82,6 +81,16 @@ CHROME = [
 TOOL_CALL = re.compile(
     rf"^{S}*[⏺●]{S}+[A-Za-z][A-Za-z0-9_.:-]*\([^)]*\){S}*…?{S}*\Z"
 )
+
+# The input prompt. Upstream treats any ❯ line as chrome and drops it whole, but this
+# is also the line carrying whatever you typed, so copying your own prompt loses it —
+# and loses it silently, leaving a paragraph that starts mid-sentence. The
+# prompt-lines rule triages these instead; PROMPT_LINE is only applied as a
+# chrome pattern when that rule is switched off.
+PROMPT_LINE = re.compile(rf"^{S}*❯")
+PROMPT_BARE = re.compile(rf"^{S}*❯{S}*\Z")
+PROMPT_MENU = re.compile(rf"^{S}*❯{S}+[0-9]+[.)]{S}")
+PROMPT_MARKER = re.compile(rf"^({S}*)❯{S}+")
 
 BULLET_PREFIX = re.compile(rf"^({S}*)[⏺●∙]{S}+")
 RESULT_PREFIX = re.compile(rf"^({S}*)⎿{S}{{0,2}}")
@@ -122,6 +131,7 @@ TRAILING_BLANKS = re.compile(r"[ \t]+\Z")
 RULES = [
     ("ansi-escapes", "Escape sequences and terminal hyperlinks"),
     ("chrome-lines", "Interface noise and hint lines"),
+    ("prompt-lines", "Prompt markers, keeping what you typed"),
     ("tool-calls", "Tool invocation headers"),
     ("message-prefixes", "Reply bullets and result markers"),
     ("box-drawing", "Frames and borders"),
@@ -137,7 +147,7 @@ RULE_IDS = [r[0] for r in RULES]
 
 # Rules that are ours, not the upstream tool's. The differential test disables these
 # so the shared core stays verifiably byte-identical to the reference implementation.
-LOCAL_RULES = frozenset({"blockquote-bars"})
+LOCAL_RULES = frozenset({"blockquote-bars", "prompt-lines"})
 
 # Prose shorter than this is assumed to be a deliberate line break, not a terminal
 # hard wrap, so it is never re-joined.
@@ -178,11 +188,35 @@ def clean(text, disabled=()):
     lines = [Line(t) for t in out.split("\n")]
 
     if "chrome-lines" in on:
+        # With prompt-lines off we fall back to upstream's behaviour of treating every
+        # ❯ line as chrome; with it on, the rule below triages them instead.
+        patterns = CHROME if "prompt-lines" in on else CHROME + [PROMPT_LINE]
         kept = []
         for line in lines:
-            if js_trim(line.text) and any(p.search(line.text) for p in CHROME):
+            if js_trim(line.text) and any(p.search(line.text) for p in patterns):
                 hit("chrome-lines")
                 continue
+            kept.append(line)
+        lines = kept
+
+    if "prompt-lines" in on:
+        kept = []
+        for line in lines:
+            if PROMPT_BARE.search(line.text) or PROMPT_MENU.search(line.text):
+                # An empty prompt, or a selection menu's highlighted row. Both chrome.
+                hit("prompt-lines")
+                continue
+            if PROMPT_MARKER.search(line.text):
+                # Everything after a ❯ is what someone typed, so keep it and drop only
+                # the marker. Replace it with padding of the same width rather than
+                # deleting it: the terminal indents continuation lines to clear the
+                # marker, so blanking it keeps the block aligned and lets reflow's
+                # dedent take the whole indent off at once. Deleting it instead would
+                # leave the first line flush and the rest indented.
+                line.text = PROMPT_MARKER.sub(
+                    lambda m: " " * len(m.group(0)), line.text, count=1
+                )
+                hit("prompt-lines")
             kept.append(line)
         lines = kept
 

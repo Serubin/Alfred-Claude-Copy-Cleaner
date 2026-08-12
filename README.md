@@ -53,6 +53,7 @@ A notification reports what changed (`Cleaned 42 → 31 lines, 1.4 KB removed`).
 | --- | --- |
 | `ansi-escapes` | Colour/cursor codes and OSC 8 hyperlink wrappers (the link text is kept) |
 | `chrome-lines` | `(esc to interrupt)`, `+47 lines (ctrl+o to expand)`, `? for shortcuts`, spinner lines, the welcome banner |
+| `prompt-lines` † | The `❯` prompt marker, **keeping what you typed**; empty prompts and `❯ 1. Yes, proceed` menu rows still go |
 | `tool-calls` | `⏺ Read(file.ts)` / `⏺ Bash(npm test)` headers |
 | `message-prefixes` | Leading `⏺` `●` `∙` bullets and `⎿` tool-result markers |
 | `box-drawing` | `╭─╮ │ ╰─╯` frames around the prompt box, dialogs, banners |
@@ -67,12 +68,23 @@ A notification reports what changed (`Cleaned 42 → 31 lines, 1.4 KB removed`).
 Markdown reconstruction (rebuilding headings, blockquotes, nested lists, code fences)
 is deliberately **not** included — this workflow only strips.
 
-† **Local deviation from upstream.** The upstream `glyphs` rule only strips `▎` when
-text follows it, and bare bars are not in its drop-list, so a quoted block comes out
-with stray `▎` lines between paragraphs. This rule blanks them. It blanks rather than
-deletes, because the bar *is* the paragraph break — deleting the line would put two
-paragraphs on adjacent lines and let `reflow` run them together. Set
-`cc_blockquote_bars=0` for strict upstream behaviour.
+† **Local deviations from upstream**, both toggleable back off.
+
+`blockquote-bars` — the upstream `glyphs` rule only strips `▎` when text follows it,
+and bare bars are not in its drop-list, so a quoted block comes out with stray `▎`
+lines between paragraphs. This rule blanks them. It blanks rather than deletes, because
+the bar *is* the paragraph break — deleting the line would put two paragraphs on
+adjacent lines and let `reflow` run them together. Set `cc_blockquote_bars=0` for
+strict upstream behaviour.
+
+`prompt-lines` — upstream treats every `❯` line as chrome and drops it whole. That is
+right for an empty prompt or a selection menu, but the prompt line is also where your
+typed text lives, so copying your own prompt silently loses its first line and leaves a
+paragraph beginning mid-sentence. This rule triages instead: menus and empty prompts
+still go, and anything else keeps its text. The marker is replaced with padding of the
+same width rather than deleted, so the wrapped continuation lines stay aligned and
+`reflow` dedents the block as a whole. Set `cc_prompt_lines=0` for strict upstream
+behaviour.
 
 ## Configuration
 

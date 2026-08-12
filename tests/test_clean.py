@@ -55,6 +55,45 @@ class RuleTests(unittest.TestCase):
             "chrome-lines", "text\n  … +47 lines (ctrl+o to expand)", "text"
         )
 
+    def test_prompt_lines_keep_what_was_typed(self):
+        # Local deviation: upstream drops the whole ❯ line, taking the typed prompt
+        # with it and leaving a paragraph that starts mid-sentence.
+        self.assert_rule(
+            "prompt-lines",
+            "❯ /tasks-workflow rank the jobs by cost",
+            "/tasks-workflow rank the jobs by cost",
+        )
+
+    # Menus and empty prompts are dropped either way, so these use a plain assertion:
+    # only the typed-text case diverges from upstream.
+    def test_prompt_lines_drop_menu_selections(self):
+        source = "⏺ Ready?\n❯ 1. Yes, proceed"
+        self.assertEqual(clean(source)[0], "Ready?")
+        self.assertEqual(clean(source, disabled={"prompt-lines"})[0], "Ready?")
+
+    def test_prompt_lines_drop_empty_prompts(self):
+        source = "⏺ done\n❯\n  ❯  "
+        self.assertEqual(clean(source)[0], "done")
+        self.assertEqual(clean(source, disabled={"prompt-lines"})[0], "done")
+
+    def test_prompt_lines_keep_the_block_aligned(self):
+        # The marker becomes padding rather than being deleted, so the wrapped
+        # continuation lines still line up and reflow dedents the block as a whole.
+        source = (
+            "❯ /tasks-workflow please review the presentation jobs for anything\n"
+            "  that could be optimised to reduce compute cost\n"
+        )
+        out, _ = clean(source)
+        self.assertEqual(
+            out,
+            "/tasks-workflow please review the presentation jobs for anything "
+            "that could be optimised to reduce compute cost",
+        )
+
+    def test_prompt_lines_disabled_matches_upstream(self):
+        source = "❯ /tasks-workflow rank the jobs\n⏺ working on it"
+        self.assertEqual(clean(source, disabled={"prompt-lines"})[0], "working on it")
+
     def test_tool_calls_drops_headers(self):
         source = "⏺ Read(config/settings.json)\n⏺ real prose survives"
         self.assert_rule("tool-calls", source, "real prose survives")
