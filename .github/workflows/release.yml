@@ -1,0 +1,122 @@
+name: Release
+
+# Pushing a tag like v1.2.3 tests, builds and publishes the .alfredworkflow.
+# workflow_dispatch runs everything except the publish step, so the pipeline can be
+# exercised without minting a release.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A re-pushed tag must not race its own earlier run.
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # create the release and upload assets
+
+    steps:
+      - name: Check out
+        # Pinned to a commit rather than a tag: a tag can be moved.
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+
+      - name: Install build and test dependencies
+        # zsh runs the workflow's own Run Script body in the integration tests.
+        # zip/unzip are used by build.sh; installed defensively in case the runner
+        # image ever drops them.
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends zsh zip unzip
+
+      - name: Run tests
+        # The release is gated on this. Note these tests stub the macOS clipboard and
+        # run zsh on Linux, so they verify logic, not the real macOS surface; the
+        # authoritative platform check is ./test.sh on a Mac before tagging.
+        run: ./test.sh
+
+      - name: Resolve version
+        id: version
+        run: |
+          set -euo pipefail
+          declared="$(tr -d '[:space:]' < VERSION)"
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            tag="${GITHUB_REF_NAME}"
+            version="${tag#v}"
+            if [ "$version" != "$declared" ]; then
+              echo "::error::Tag $tag implies version $version but VERSION says $declared." \
+                   "Bump VERSION in the commit you tag, or retag."
+              exit 1
+            fi
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            tag=""
+            version="$declared"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Dry run — building $version without publishing."
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build workflow
+        env:
+          WORKFLOW_VERSION: ${{ steps.version.outputs.version }}
+        run: ./build.sh
+
+      - name: Verify artifact
+        id: artifact
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          built="dist/Claude Code Paste Cleaner.alfredworkflow"
+          asset="dist/Claude-Code-Paste-Cleaner-${VERSION}.alfredworkflow"
+
+          # build.sh already asserts info.plist sits at the archive root; this checks
+          # the shipped plist actually carries the version being released, which is
+          # what Alfred shows in its workflow list.
+          embedded="$(unzip -p "$built" info.plist \
+            | python3 -c 'import plistlib,sys; print(plistlib.loads(sys.stdin.buffer.read())["version"])')"
+          if [ "$embedded" != "$VERSION" ]; then
+            echo "::error::Built workflow reports version $embedded, expected $VERSION."
+            exit 1
+          fi
+
+          # GitHub turns spaces in asset names into dots; name it explicitly instead.
+          mv "$built" "$asset"
+          ( cd dist && sha256sum "$(basename "$asset")" > "$(basename "$asset").sha256" )
+
+          echo "asset=$asset" >> "$GITHUB_OUTPUT"
+          echo "Built $asset ($(du -h "$asset" | cut -f1))"
+          cat "$asset.sha256"
+
+      - name: Upload dry-run artifact
+        if: steps.version.outputs.publish != 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: alfredworkflow-${{ steps.version.outputs.version }}
+          path: dist/
+          if-no-files-found: error
+
+      - name: Publish release
+        if: steps.version.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          ASSET: ${{ steps.artifact.outputs.asset }}
+        run: |
+          set -euo pipefail
+          # --generate-notes works out the previous tag on its own.
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --generate-notes \
+            "$ASSET" "$ASSET.sha256"
+          echo "::notice::Published $TAG"

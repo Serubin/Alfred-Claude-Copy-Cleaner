@@ -11,6 +11,7 @@ points without touching the real clipboard.
 import os
 import pathlib
 import plistlib
+import shutil
 import stat
 import subprocess
 import sys
@@ -20,6 +21,9 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "src"
 PLIST = SRC / "info.plist"
+
+# Alfred always runs the action under zsh; on Linux CI it lives somewhere else.
+ZSH = shutil.which("zsh") or "/bin/zsh"
 
 ARTIFACT_TEXT = "⏺ Read(config/settings.json)\n  ⎿  Read 42 lines (ctrl+o to expand)\n⏺ The timeout was wrong.\n"
 CLEANED_TEXT = "The timeout was wrong."
@@ -64,7 +68,7 @@ class ScriptActionTests(unittest.TestCase):
             )
 
             proc = subprocess.run(
-                ["/bin/zsh", str(script), argument],
+                [ZSH, str(script), argument],
                 cwd=SRC,  # Alfred runs scripts from the workflow directory
                 capture_output=True,
                 env=environ,
@@ -119,7 +123,14 @@ class PlistTests(unittest.TestCase):
         self.objects = {o["uid"]: o for o in self.wf["objects"]}
 
     def test_plist_is_valid(self):
-        subprocess.run(["plutil", "-lint", str(PLIST)], check=True, capture_output=True)
+        with open(PLIST, "rb") as f:
+            plistlib.load(f)  # raises on malformed input
+
+    def test_version_tracks_the_version_file(self):
+        # The release job overrides this from the git tag; the committed plist must
+        # agree with VERSION so an ordinary build never churns the file.
+        expected = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        self.assertEqual(self.wf["version"], expected)
 
     def test_both_triggers_reach_the_script(self):
         script_uid = next(

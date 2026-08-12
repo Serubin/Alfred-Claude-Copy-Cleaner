@@ -23,13 +23,19 @@ worked this problem out first — same rule set, same ordering, verified against
 
 ## Install
 
+Download the `.alfredworkflow` from the [latest release][releases] and double-click it.
+
+[releases]: https://github.com/Serubin/Alfred-Claude-Copy-Cleaner/releases/latest
+
+Or build it yourself:
+
 ```sh
 ./build.sh
 open "dist/Claude Code Paste Cleaner.alfredworkflow"
 ```
 
-Then open the workflow in Alfred and **assign a hotkey** — exported workflows never
-carry one, so the Hotkey trigger arrives unbound.
+Either way, open the workflow in Alfred afterwards and **assign a hotkey** — exported
+workflows never carry one, so the Hotkey trigger arrives unbound.
 
 ## Use
 
@@ -105,6 +111,32 @@ implementation additionally needs node — see
 
 `src/info.plist` is generated. Edit `tools/make_plist.py` rather than the plist, or
 `build.sh` will overwrite your changes on the next build.
+
+### Cutting a release
+
+`.github/workflows/release.yml` builds and publishes on any `v*` tag:
+
+```sh
+# 1. bump VERSION in the same commit you intend to tag
+echo 1.1.0 > VERSION && ./build.sh && ./test.sh
+git commit -am "Release 1.1.0"
+
+# 2. tag and push
+git tag v1.1.0 && git push origin main --tags
+```
+
+The workflow refuses to publish if the tag and `VERSION` disagree — that check exists
+so a release can't ship a workflow whose Alfred-visible version says something else.
+The version reaches the plist through `WORKFLOW_VERSION`, which the release job sets
+from the tag; local builds fall back to `VERSION`, so ordinary builds never churn
+`src/info.plist`.
+
+`workflow_dispatch` runs the same pipeline without publishing, uploading the built
+workflow as a run artifact — useful for checking the pipeline itself.
+
+CI runs on Linux, where the integration tests stub the macOS clipboard and run the
+action body under Linux zsh. That verifies logic, not the real macOS surface, so
+**run `./test.sh` on your Mac before tagging** — that is the authoritative check.
 
 ## Relationship to the original tool
 

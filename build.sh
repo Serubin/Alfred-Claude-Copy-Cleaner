@@ -15,7 +15,10 @@ NAME="Claude Code Paste Cleaner"
 OUT="$ROOT/dist/$NAME.alfredworkflow"
 
 python3 "$ROOT/tools/make_plist.py"
-plutil -lint "$ROOT/src/info.plist" >/dev/null
+# plistlib rather than `plutil -lint` so the build runs on Linux CI too; it parses the
+# same file and fails on the same malformed input.
+python3 -c 'import plistlib,sys; plistlib.load(open(sys.argv[1],"rb"))' \
+  "$ROOT/src/info.plist"
 
 mkdir -p "$ROOT/dist"
 rm -f "$OUT"
