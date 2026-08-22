@@ -1,0 +1,14 @@
+When explaining anything use plain language, short sentences, and avoid dense or overly compressed phrasing.
+  considering following simplified technical english
+
+⏺ The compaction job holds an advisory lock for the whole run, which is fine at today's volume.
+  it stops being fine once a second runner needs the same partition.
+
+A capitalised continuation is left alone because it might genuinely be a new sentence.
+  Considering following simplified technical english
+
+Short line.
+considering this stays put because the previous line is under the threshold
+
+The list below must not be swallowed even though this line ends in a colon:
+  - considering following simplified technical english

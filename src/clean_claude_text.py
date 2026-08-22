@@ -108,6 +108,18 @@ UNICODE_SPACE = re.compile("[   -   　]")
 ZERO_WIDTH = re.compile("[​‌‍⁠﻿]")
 
 SENTENCE_END = re.compile(r"[.!?:;…]\Z")
+
+
+def continues_sentence(text):
+    """True when `text` cannot be the start of a new sentence.
+
+    A wrapped line that happens to break after a full stop looks exactly like a
+    paragraph boundary, and reflow refuses to join across one. A lowercase opening
+    word settles it: prose does not start a sentence that way, so the break came from
+    the terminal, not the author.
+    """
+    return text[:1].islower()
+
 LIST_START = re.compile(
     rf"^([-*+•]{S}|[0-9]+[.)]{S}|[A-Za-z][.)]{S}|[ivxlcdmIVXLCDM]+[.)]{S}"
     r"|[>#|]|```|▎|⏺|●|☐|☒)"
@@ -129,6 +141,7 @@ RULES = [
     ("blockquote-bars", "Empty quote bars"),
     ("line-gutters", "Leading line numbers"),
     ("reflow", "Terminal hard wrapping"),
+    ("wrapped-sentences", "Wraps that fall after a full stop"),
     ("unicode-whitespace", "Exotic and invisible spaces"),
     ("smart-quotes", "Curly quotes to ASCII"),
     ("trailing-blanklines", "Line-end space and blank runs"),
@@ -137,7 +150,7 @@ RULE_IDS = [r[0] for r in RULES]
 
 # Rules that are ours, not the upstream tool's. The differential test disables these
 # so the shared core stays verifiably byte-identical to the reference implementation.
-LOCAL_RULES = frozenset({"blockquote-bars"})
+LOCAL_RULES = frozenset({"blockquote-bars", "wrapped-sentences"})
 
 # Prose shorter than this is assumed to be a deliberate line break, not a terminal
 # hard wrap, so it is never re-joined.
@@ -273,6 +286,7 @@ def clean(text, disabled=()):
             fenced[i] = inside
 
     if "reflow" in on:
+        relax_sentences = "wrapped-sentences" in on
         result = []
         group = []
         skip = False
@@ -299,9 +313,14 @@ def clean(text, disabled=()):
                     prev = merged[-1]
                     nxt = js_trim_start(ln.text)
                     head = js_trim_end(prev.text)
+                    # A full stop normally ends the paragraph, but not when the
+                    # next line is plainly mid-sentence -- see continues_sentence.
+                    stops_here = SENTENCE_END.search(head) and not (
+                        relax_sentences and continues_sentence(nxt)
+                    )
                     if (
                         js_len(head) < REFLOW_MIN_LEN
-                        or SENTENCE_END.search(head)
+                        or stops_here
                         or not nxt
                         or LIST_START.search(nxt)
                     ):

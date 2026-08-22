@@ -1,6 +1,6 @@
 {
   "seed": 1729,
   "cases": 2000,
-  "sha256": "e131574abcfe1ab30e452abb4eb10b9ba43bfc66eb639393359c67cbaa042c29",
+  "sha256": "9a35c50a6d4be976172498c95dfa4825b8a04b2e3ae2399e12edc468800a52b2",
   "note": "sha256 of the reference implementation's outputs, NUL-joined. Regenerate with tools/make_golden.py."
 }

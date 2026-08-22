@@ -60,6 +60,7 @@ A notification reports what changed (`Cleaned 42 → 31 lines, 1.4 KB removed`).
 | `blockquote-bars` † | Bare `▎` bars — the blank lines inside a quoted block — become real blank lines |
 | `line-gutters` | `123→` file-read gutters, `cat -n` numbering, `41 -` / `42 +` diff gutters |
 | `reflow` | Terminal hard-wrapping — re-joins wrapped prose, leaving lists, quotes and fenced code alone |
+| `wrapped-sentences` † | Wraps that land after a full stop, when the next line is plainly mid-sentence |
 | `unicode-whitespace` | Non-breaking and exotic spaces → plain spaces; zero-width characters deleted |
 | `smart-quotes` | `“ ” ‘ ’` → `" '` |
 | `trailing-blanklines` | Trailing spaces; runs of 3+ blank lines collapsed to one |
@@ -73,6 +74,15 @@ with stray `▎` lines between paragraphs. This rule blanks them. It blanks rath
 deletes, because the bar *is* the paragraph break — deleting the line would put two
 paragraphs on adjacent lines and let `reflow` run them together. Set
 `cc_blockquote_bars=0` for strict upstream behaviour.
+
+`wrapped-sentences` — `reflow` refuses to join across a full stop, on the reasonable
+assumption that it ends a paragraph. But a terminal wrapping a long sentence can break
+right after one, and then the paragraph arrives split. This rule allows the join when
+the next line begins with a **lowercase letter**, which prose does not do at the start
+of a sentence. Every other guard still applies: the previous line must clear the
+40-character threshold, and the next must not look like a list item, quote, heading or
+fence. A capitalised continuation is left alone, since it might genuinely be a new
+sentence. Set `cc_wrapped_sentences=0` for strict upstream behaviour.
 
 ## Configuration
 

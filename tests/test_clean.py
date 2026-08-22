@@ -110,6 +110,44 @@ class RuleTests(unittest.TestCase):
             "so the assertion depends on hash ordering",
         )
 
+    def test_wrapped_sentences_rejoin_after_a_full_stop(self):
+        # Local deviation: upstream treats any full stop at a line end as a paragraph
+        # boundary, so a wrap that lands there is never re-joined.
+        source = (
+            "When explaining anything use plain language, short sentences, and avoid "
+            "dense phrasing.\n"
+            "  considering following simplified technical english"
+        )
+        self.assert_rule(
+            "wrapped-sentences",
+            source,
+            "When explaining anything use plain language, short sentences, and avoid "
+            "dense phrasing. considering following simplified technical english",
+        )
+
+    def test_wrapped_sentences_leave_capitalised_continuations(self):
+        # Might genuinely be a new sentence, so the full stop still wins.
+        source = (
+            "When explaining anything use plain language, short sentences, and avoid "
+            "dense phrasing.\n"
+            "  Considering following simplified technical english"
+        )
+        out, _ = clean(source)
+        self.assertEqual(len(out.split("\n")), 2, out)
+
+    def test_wrapped_sentences_respect_the_length_threshold(self):
+        source = "Short line.\nconsidering this stays put"
+        self.assertEqual(clean(source)[0], source)
+
+    def test_wrapped_sentences_do_not_swallow_lists(self):
+        source = (
+            "The list below must not be swallowed even though this line ends in a "
+            "colon:\n"
+            "  - considering following simplified technical english"
+        )
+        out, _ = clean(source)
+        self.assertEqual(len(out.split("\n")), 2, out)
+
     def test_reflow_leaves_short_lines_alone(self):
         source = "Short line.\nAnother short one."
         self.assertEqual(clean(source)[0], source)
