@@ -84,6 +84,8 @@ LINE_POOL = [
     "## What Is Going On",
     "Short line.",
     "This line is exactly long enough to be a candidate for rejoining",
+    "A line long enough to be a rejoin candidate that ends in a full stop.",
+    "considering following simplified technical english",
     "continuation text that follows a long line and should be merged in",
     "He said “the ordering is wrong” and he’s right about the ‘seed’ step",
     "🚀🚀🚀🚀 emoji push this past forty utf-16 units but not code points",
