@@ -89,6 +89,17 @@ class RuleTests(unittest.TestCase):
         out, _ = clean(source)
         self.assertEqual(len(out.split("\n\n")), 2, out)
 
+    def test_blockquote_bars_keep_capitalised_paragraphs_apart(self):
+        # Bars make a wrapped line joinable across a full stop; the blank bar between
+        # two quoted paragraphs must still outrank that.
+        source = (
+            "▎ A quoted paragraph long enough to be a rejoin candidate here.\n"
+            "▎\n"
+            "▎ A second paragraph that must not be merged into the first.\n"
+        )
+        out, _ = clean(source)
+        self.assertEqual(len(out.split("\n\n")), 2, out)
+
     def test_line_gutters_strips_file_read_numbers(self):
         # The gutter takes its own indent with it; the file's own indentation stays,
         # and gutter lines are exempt from reflow's dedent so it survives verbatim.
@@ -134,6 +145,26 @@ class RuleTests(unittest.TestCase):
         )
         out, _ = clean(source)
         self.assertEqual(len(out.split("\n")), 2, out)
+
+    def test_wrapped_sentences_rejoin_quote_bar_continuations(self):
+        # A partial copy loses the first line's bar; the surviving bar on the next line
+        # still says the two were one wrapped paragraph, so the full stop does not win.
+        source = (
+            "computes it as vendor severity when non-empty and the namespace is not "
+            "alpine, then 'Unknown'.\n"
+            "  \u258e This emits the bare column, so every alpine:* advisory would flip."
+        )
+        self.assert_rule(
+            "wrapped-sentences",
+            source,
+            "computes it as vendor severity when non-empty and the namespace is not "
+            "alpine, then 'Unknown'. This emits the bare column, so every alpine:* "
+            "advisory would flip.",
+        )
+
+    def test_wrapped_sentences_quote_bars_respect_the_length_threshold(self):
+        source = "Short line.\n\u258e Another short one."
+        self.assertEqual(clean(source)[0], "Short line.\nAnother short one.")
 
     def test_wrapped_sentences_respect_the_length_threshold(self):
         source = "Short line.\nconsidering this stays put"

@@ -60,7 +60,7 @@ A notification reports what changed (`Cleaned 42 → 31 lines, 1.4 KB removed`).
 | `blockquote-bars` † | Bare `▎` bars — the blank lines inside a quoted block — become real blank lines |
 | `line-gutters` | `123→` file-read gutters, `cat -n` numbering, `41 -` / `42 +` diff gutters |
 | `reflow` | Terminal hard-wrapping — re-joins wrapped prose, leaving lists, quotes and fenced code alone |
-| `wrapped-sentences` † | Wraps that land after a full stop, when the next line is plainly mid-sentence |
+| `wrapped-sentences` † | Wraps that land after a full stop, when the next line is plainly mid-sentence or wore a `▎` bar |
 | `unicode-whitespace` | Non-breaking and exotic spaces → plain spaces; zero-width characters deleted |
 | `smart-quotes` | `“ ” ‘ ’` → `" '` |
 | `trailing-blanklines` | Trailing spaces; runs of 3+ blank lines collapsed to one |
@@ -81,8 +81,17 @@ right after one, and then the paragraph arrives split. This rule allows the join
 the next line begins with a **lowercase letter**, which prose does not do at the start
 of a sentence. Every other guard still applies: the previous line must clear the
 40-character threshold, and the next must not look like a list item, quote, heading or
-fence. A capitalised continuation is left alone, since it might genuinely be a new
-sentence. Set `cc_wrapped_sentences=0` for strict upstream behaviour.
+fence. A capitalised continuation is otherwise left alone, since it might genuinely be
+a new sentence.
+
+The one exception is a line that arrived with a `▎` bar of its own. Every wrapped line
+of a quoted block carries one, so the bar says the line continues the one above it
+whatever case it starts in — which is what rescues a partial copy, where the selection
+began mid-line and the first line lost its bar. Quoted paragraphs stay apart because the
+bare bar between them becomes a blank line. The cost is that prose sitting directly above
+a quote with no blank line between them will be joined to it; the TUI puts a blank line
+before a blockquote, so that shape does not arise in a real paste. Set
+`cc_wrapped_sentences=0` for strict upstream behaviour.
 
 ## Configuration
 
