@@ -95,6 +95,10 @@ BOX_RIGHT = re.compile(rf" ?[│┃]{S}*\Z")
 GLYPH_STRIP = re.compile(rf"^({S}*)[☐☒◇◆○◐◉↑↓←→↻↯⑂⚑※▶⏸▎✽✻✶✳✢]{S}+")
 GLYPH_ONLY = re.compile(rf"^{S}*[☐☒◇◆○◐◉↑↓←→↻↯⑂⚑※▶⏸]{S}*\Z")
 
+# Every wrapped line of a quoted block carries its own bar, so a line that had one is a
+# continuation of the line above whatever it starts with -- see reflow's stops_here.
+QUOTE_BAR_PREFIX = re.compile(rf"^({S}*)▎{S}+")
+
 # A blockquote bar with nothing after it: the blank line *inside* a quoted block.
 # GLYPH_STRIP needs whitespace after the bar so it never matches these, and ▎ is
 # absent from GLYPH_ONLY, so upstream leaves them behind as stray "▎" lines.
@@ -158,11 +162,12 @@ REFLOW_MIN_LEN = 40
 
 
 class Line:
-    __slots__ = ("text", "gutter")
+    __slots__ = ("text", "gutter", "quote")
 
     def __init__(self, text):
         self.text = text
         self.gutter = False
+        self.quote = False
 
 
 def clean(text, disabled=()):
@@ -247,6 +252,7 @@ def clean(text, disabled=()):
         lines = kept
         for line in lines:
             if GLYPH_STRIP.search(line.text):
+                line.quote = bool(QUOTE_BAR_PREFIX.search(line.text))
                 line.text = GLYPH_STRIP.sub(r"\1", line.text, count=1)
                 hit("glyphs")
 
@@ -313,10 +319,10 @@ def clean(text, disabled=()):
                     prev = merged[-1]
                     nxt = js_trim_start(ln.text)
                     head = js_trim_end(prev.text)
-                    # A full stop normally ends the paragraph, but not when the
-                    # next line is plainly mid-sentence -- see continues_sentence.
+                    # A full stop normally ends the paragraph, but not when the next
+                    # line is plainly mid-sentence or wore a quote bar of its own.
                     stops_here = SENTENCE_END.search(head) and not (
-                        relax_sentences and continues_sentence(nxt)
+                        relax_sentences and (continues_sentence(nxt) or ln.quote)
                     )
                     if (
                         js_len(head) < REFLOW_MIN_LEN
