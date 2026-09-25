@@ -55,6 +55,86 @@ class RuleTests(unittest.TestCase):
             "chrome-lines", "text\n  … +47 lines (ctrl+o to expand)", "text"
         )
 
+    def test_prompt_lines_keep_what_was_typed(self):
+        # Local deviation: upstream drops the whole ❯ line, taking the typed prompt
+        # with it and leaving a paragraph that starts mid-sentence.
+        self.assert_rule(
+            "prompt-lines",
+            "❯ /tasks-workflow rank the jobs by cost",
+            "/tasks-workflow rank the jobs by cost",
+        )
+
+    # Menus and empty prompts are dropped either way, so these use a plain assertion:
+    # only the typed-text case diverges from upstream.
+    def test_prompt_lines_drop_menu_selections(self):
+        source = "⏺ Ready?\n❯ 1. Yes, proceed"
+        self.assertEqual(clean(source)[0], "Ready?")
+        self.assertEqual(clean(source, disabled={"prompt-lines"})[0], "Ready?")
+
+    def test_prompt_lines_drop_empty_prompts(self):
+        source = "⏺ done\n❯\n  ❯  "
+        self.assertEqual(clean(source)[0], "done")
+        self.assertEqual(clean(source, disabled={"prompt-lines"})[0], "done")
+
+    def test_prompt_lines_keep_the_block_aligned(self):
+        # The marker becomes padding rather than being deleted, so the wrapped
+        # continuation lines still line up and reflow dedents the block as a whole.
+        source = (
+            "❯ /tasks-workflow please review the presentation jobs for anything\n"
+            "  that could be optimised to reduce compute cost\n"
+        )
+        out, _ = clean(source)
+        self.assertEqual(
+            out,
+            "/tasks-workflow please review the presentation jobs for anything "
+            "that could be optimised to reduce compute cost",
+        )
+
+    def test_prompt_lines_never_join_the_line_above(self):
+        # A prompt is a change of speaker. Upstream deleted the line so nothing could
+        # merge into it; keeping the text must not let reflow weld the two turns.
+        source = (
+            "⏺ The nightly job stalled because the advisory lock was never released.\n"
+            "╭──────────────────────────────╮\n"
+            "❯ ok now check the partition table and report back to me please\n"
+            "╰──────────────────────────────╯"
+        )
+        self.assertEqual(
+            clean(source)[0],
+            "The nightly job stalled because the advisory lock was never released.\n"
+            "ok now check the partition table and report back to me please",
+        )
+
+    def test_prompt_lines_strip_a_marker_with_no_space(self):
+        # A pasted shell prompt from starship or pure. The marker must still go: left
+        # in place it is ordinary prose to reflow and gets glued mid-paragraph.
+        self.assertEqual(clean("❯foo bar baz")[0], "foo bar baz")
+        self.assertEqual(clean("❯❯ run it again")[0], "run it again")
+
+    def test_prompt_lines_still_let_chrome_be_dropped(self):
+        # prompt-lines runs first so the anchored CHROME patterns see the de-markered
+        # line; running it second would let a hint ride in behind the marker.
+        for hint in ("? for shortcuts", "✻ Welcome to Claude Code", "⎿  Interrupted"):
+            with self.subTest(hint=hint):
+                self.assertEqual(clean(f"⏺ hi\n❯ {hint}")[0], "hi")
+
+    def test_prompt_lines_drop_the_padding_when_reflow_is_suppressed(self):
+        # A gutter or fence in the same group suppresses the dedent that normally
+        # takes the marker's padding off, so the padding has to go on its own.
+        source = (
+            "❯ now explain what those two lines are doing in the file\n"
+            "   1→const x = 1;"
+        )
+        self.assertEqual(
+            clean(source)[0],
+            "now explain what those two lines are doing in the file\nconst x = 1;",
+        )
+        self.assertEqual(clean("```sh\n❯ npm test\n```")[0], "```sh\nnpm test\n```")
+
+    def test_prompt_lines_disabled_matches_upstream(self):
+        source = "❯ /tasks-workflow rank the jobs\n⏺ working on it"
+        self.assertEqual(clean(source, disabled={"prompt-lines"})[0], "working on it")
+
     def test_tool_calls_drops_headers(self):
         source = "⏺ Read(config/settings.json)\n⏺ real prose survives"
         self.assert_rule("tool-calls", source, "real prose survives")
