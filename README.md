@@ -54,6 +54,7 @@ A notification reports what changed (`Cleaned 42 → 31 lines, 1.4 KB removed`).
 | `ansi-escapes` | Colour/cursor codes and OSC 8 hyperlink wrappers (the link text is kept) |
 | `chrome-lines` | `(esc to interrupt)`, `+47 lines (ctrl+o to expand)`, `? for shortcuts`, spinner lines, the welcome banner |
 | `prompt-lines` † | The `❯` prompt marker, **keeping what you typed**; empty prompts and `❯ 1. Yes, proceed` menu rows still go |
+| `panel-bleed` † | Diff side-panel text (`No changes this session`, `3 files changed +12 -4`, …) glued to the end of a line |
 | `tool-calls` | `⏺ Read(file.ts)` / `⏺ Bash(npm test)` headers |
 | `message-prefixes` | Leading `⏺` `●` `∙` bullets and `⎿` tool-result markers |
 | `box-drawing` | `╭─╮ │ ╰─╯` frames around the prompt box, dialogs, banners |
@@ -89,6 +90,27 @@ is a change of speaker, so `reflow` never joins it to the line above, which upst
 got for free by deleting the line. The one thing it costs you: a prompt you typed
 starting `1. ` or `2) ` reads as a menu row and goes with them. Set `cc_prompt_lines=0`
 for strict upstream behaviour.
+
+`panel-bleed` — the diff side panel renders to the *right* of the conversation column,
+so copying a region drags the panel's text onto the end of whatever line it happened to
+sit beside, behind the right-align gap:
+
+```
+• chore(vuln): Remove the CVE batch cards …/pull/35130          No changes this session
+```
+
+A line is only cut when it ends in one of the panel's known strings — the empty states
+(`No changes this session`, `No uncommitted changes`, `No changes vs <branch>`,
+`No commits yet`, `Diff unavailable`, `Loading diff…`, `Only … files changed`,
+`Too many changed files to show diff`) or the `N files changed +12 -4` header, each
+optionally followed by the panel's `✕` close button. Both a known string *and* a gap of
+two or more spaces are required, so a bare `No commits yet` inside a pasted `git status`
+transcript survives and prose is only at risk when it ends in one of these phrases
+behind a column-width gap.
+
+Panel *content* is out of scope: when the panel actually has changes it bleeds file rows
+and diff hunks onto every adjacent line, and no phrase list can catch those. Set
+`cc_panel_bleed=0` to turn the rule off.
 
 `wrapped-sentences` — `reflow` refuses to join across a full stop, on the reasonable
 assumption that it ends a paragraph. But a terminal wrapping a long sentence can break
