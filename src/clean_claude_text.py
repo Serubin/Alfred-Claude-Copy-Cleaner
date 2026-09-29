@@ -67,6 +67,21 @@ OSC8 = re.compile(
 OSC_ANY = re.compile(ESC + r"\][^\x07\x1b]*(?:\x07|" + ESC + r"\\)")
 CSI = re.compile(ESC + r"\[[0-?]*[ -/]*[@-~]")
 
+# The diff side panel renders to the right of the conversation, so copying a region drags
+# its text onto the end of whatever line it sat beside, behind the right-align gap.
+PANEL_TEXT = "|".join((
+    r"No changes this session",
+    r"No uncommitted changes",
+    r"No commits yet",
+    r"Diff unavailable",
+    r"Loading diff…",
+    r"Too many changed files to show diff",
+    r"Only (?:hidden|read-denied|tests and generated) files changed",
+    rf"No changes vs {NS}+",
+    rf"[0-9]+ files? changed(?:{S}\+[0-9]+)?(?:{S}-[0-9]+)?",
+))
+PANEL_BLEED = re.compile(rf"{S}{{2,}}(?:{PANEL_TEXT})(?:{S}+✕)?{S}*\Z")
+
 CHROME = [
     re.compile(rf"^{S}*[·✢✳✶✻✽*]{S}+{NS}{DOT}*…"),
     re.compile(r"\(esc to interrupt", re.I),
@@ -144,6 +159,7 @@ TRAILING_BLANKS = re.compile(r"[ \t]+\Z")
 # reflow (gutter lines suppress re-joining), and reflow before smart quotes.
 RULES = [
     ("ansi-escapes", "Escape sequences and terminal hyperlinks"),
+    ("panel-bleed", "Diff panel text pulled into the copy"),
     ("prompt-lines", "Prompt markers, keeping what you typed"),
     ("chrome-lines", "Interface noise and hint lines"),
     ("tool-calls", "Tool invocation headers"),
@@ -162,7 +178,9 @@ RULE_IDS = [r[0] for r in RULES]
 
 # Rules that are ours, not the upstream tool's. The differential test disables these
 # so the shared core stays verifiably byte-identical to the reference implementation.
-LOCAL_RULES = frozenset({"blockquote-bars", "prompt-lines", "wrapped-sentences"})
+LOCAL_RULES = frozenset(
+    {"blockquote-bars", "panel-bleed", "prompt-lines", "wrapped-sentences"}
+)
 
 # Prose shorter than this is assumed to be a deliberate line break, not a terminal
 # hard wrap, so it is never re-joined.
@@ -203,6 +221,14 @@ def clean(text, disabled=()):
         out = CSI.sub(drop, out)
 
     lines = [Line(t) for t in out.split("\n")]
+
+    if "panel-bleed" in on:
+        for line in lines:
+            if PANEL_BLEED.search(line.text):
+                # Blanking is the identity operation on the conversation column: the row
+                # had no conversation content, so an empty line reproduces what was there.
+                line.text = PANEL_BLEED.sub("", line.text, count=1)
+                hit("panel-bleed")
 
     if "prompt-lines" in on:
         kept = []

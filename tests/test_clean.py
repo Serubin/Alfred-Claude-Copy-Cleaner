@@ -135,6 +135,91 @@ class RuleTests(unittest.TestCase):
         source = "❯ /tasks-workflow rank the jobs\n⏺ working on it"
         self.assertEqual(clean(source, disabled={"prompt-lines"})[0], "working on it")
 
+    def test_panel_bleed_strips_the_diff_panel_empty_state(self):
+        # The diff side panel renders to the right of the conversation, so a copy drags
+        # its text onto the end of whatever line it sat beside.
+        self.assert_rule(
+            "panel-bleed",
+            "  \u2022 chore(vuln): Remove the CVE batch cards"
+            "                    No changes this session",
+            "\u2022 chore(vuln): Remove the CVE batch cards",
+        )
+
+    def test_panel_bleed_strips_the_panel_close_button_with_it(self):
+        # The panel's title row ends with a right-aligned close button, and a wide enough
+        # selection picks it up; no other rule would drop a stray \u2715.
+        self.assert_rule(
+            "panel-bleed",
+            "  \u2022 chore(vuln): Remove the CVE batch cards"
+            "        No changes this session        \u2715",
+            "\u2022 chore(vuln): Remove the CVE batch cards",
+        )
+
+    def test_panel_bleed_strips_the_changed_files_header(self):
+        self.assert_rule(
+            "panel-bleed",
+            "some conversation text here        3 files changed +12 -4",
+            "some conversation text here",
+        )
+
+    def test_panel_bleed_strips_a_branch_comparison(self):
+        self.assert_rule(
+            "panel-bleed",
+            "some conversation text here        No changes vs my-branch",
+            "some conversation text here",
+        )
+
+    def test_panel_bleed_lets_chrome_lines_drop_a_bled_spinner_row(self):
+        # Placement matters: the rule runs before chrome-lines so the spinner row matches
+        # its bare-glyph pattern once the tail is gone, instead of leaving a stray \u00b7.
+        self.assert_rule(
+            "panel-bleed", "kept line\n\u00b7        No changes this session", "kept line"
+        )
+
+    def test_panel_bleed_lets_prompt_lines_drop_a_bled_empty_prompt(self):
+        # Same placement argument against prompt-lines: PROMPT_BARE only matches an
+        # empty prompt once the panel's tail is off it.
+        self.assert_rule(
+            "panel-bleed", "kept line\n❯          No changes this session", "kept line"
+        )
+
+    def test_panel_bleed_keeps_a_bled_prompt_you_typed(self):
+        self.assert_rule(
+            "panel-bleed",
+            "❯ what I typed here          No changes this session",
+            "what I typed here",
+        )
+
+    def test_panel_bleed_keeps_paragraphs_apart(self):
+        # A panel-only row means the conversation column was blank there, so blanking the
+        # line reproduces it; deleting would let reflow run the paragraphs together.
+        source = (
+            "A paragraph long enough to be a rejoin candidate over here\n"
+            "                    No changes this session\n"
+            "a second paragraph that must not be merged into the first\n"
+        )
+        out, _ = clean(source)
+        self.assertEqual(len(out.split("\n\n")), 2, out)
+
+    def test_panel_bleed_leaves_prose_alone(self):
+        # The branch alternative stops at the first space, so it cannot eat a clause.
+        source = "Rebased onto main.  No changes vs upstream, so I skipped the PR entirely."
+        self.assertEqual(clean(source)[0], source)
+
+    def test_panel_bleed_needs_the_right_align_gap(self):
+        # One space is prose, not a rendered column gap; mid-line is never the panel.
+        self.assertEqual(
+            clean("The diff panel said No changes this session.")[0],
+            "The diff panel said No changes this session.",
+        )
+        source = "No changes this session was what the panel reported at the time"
+        self.assertEqual(clean(source)[0], source)
+
+    def test_panel_bleed_leaves_fenced_transcripts_alone(self):
+        # The rule has no fence awareness, so the gap requirement is the only guard.
+        source = "```\n$ git status\nNo commits yet\n```"
+        self.assertEqual(clean(source)[0], source)
+
     def test_tool_calls_drops_headers(self):
         source = "⏺ Read(config/settings.json)\n⏺ real prose survives"
         self.assert_rule("tool-calls", source, "real prose survives")
