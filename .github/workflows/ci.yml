@@ -1,0 +1,80 @@
+name: CI
+
+# Tests and packages every change on Linux and on macOS with Apple's system Python,
+# the interpreter the shipped workflow actually runs under. release.yml calls this too.
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  # When called from release.yml, github.workflow is "Release", keeping this group apart
+  # from both normal CI runs and the caller's own release-<ref> group.
+  group: ${{ github.workflow }}-ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Check out
+        # Pinned to a commit rather than a tag: a tag can be moved.
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install test dependencies (Linux)
+        if: runner.os == 'Linux'
+        # zsh runs the workflow's Run Script body; zip/unzip are used by build.sh.
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends zsh zip unzip
+
+      - name: Use system Python (macOS)
+        if: runner.os == 'macOS'
+        # The runner's default python3 is Homebrew's; users get Apple's /usr/bin/python3.
+        run: echo /usr/bin >> "$GITHUB_PATH"
+
+      - name: Check interpreter
+        run: |
+          set -eu
+          if [ "$RUNNER_OS" = "macOS" ] && [ "$(command -v python3)" != "/usr/bin/python3" ]; then
+            echo "::error::python3 resolves to $(command -v python3), expected /usr/bin/python3."
+            exit 1
+          fi
+          python3 --version
+          zsh --version
+
+      - name: Check info.plist matches its generator
+        # Before the tests, which read the committed plist rather than a regenerated one.
+        run: |
+          python3 tools/make_plist.py
+          git diff --exit-code src/info.plist
+
+      - name: Run tests
+        run: ./test.sh
+
+      - name: Build workflow
+        run: ./build.sh
+
+      - name: Check src/ is clean
+        # --ignored because .gitignore hides __pycache__, which build.sh would zip.
+        run: |
+          dirty="$(git status --porcelain --ignored -- src)"
+          if [ -n "$dirty" ]; then
+            echo "::error::Untracked or modified files in src/ would ship in the workflow:"
+            echo "$dirty"
+            exit 1
+          fi
