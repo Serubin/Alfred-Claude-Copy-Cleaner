@@ -114,6 +114,58 @@ BOX_ANY = re.compile(rf"[{BOX_CHARS}]")
 BOX_LEFT = re.compile(rf"^({S}*)[│┃] ?")
 BOX_RIGHT = re.compile(rf" ?[│┃]{S}*\Z")
 
+# The dock grip is a full-height left border between the conversation and whatever
+# panel is docked, so its column bounds the panel whatever the panel is showing.
+DOCK_BARS = "│┃"
+DOCK_CORNERS = "╭╮╰╯┌┐└┘├┤┬┴┼╔╗╚╝╠╣╦╩╬"
+DOCK_MIN_LINES = 3
+DOCK_MIN_SHARE = 0.5
+DOCK_COL_TOLERANCE = 2
+# The grip divides a sidebar off the conversation, so it is always well right of the
+# left margin. A two-column table's separator and a tree's trunk are not.
+DOCK_MIN_COLUMN = 40
+
+
+def dock_columns(texts):
+    """Columns holding a dock divider, as character indices into each line.
+
+    The risk here is deleting conversation text, so a column has to clear five gates:
+    it sits right of the conversation's left margin, carries a bar on most non-blank
+    lines and on enough of them outright, has no corner or tee at it, and its lines do
+    not half of them carry a second bar. The last two separate a grip from a frame --
+    a frame's column is closed and a tree trunk's is teed, and both repeat their bars.
+    """
+    bars = [next((i for i, c in enumerate(t) if c in DOCK_BARS), None) for t in texts]
+    filled = [i for i, t in enumerate(texts) if js_trim(t)]
+    if not filled:
+        return set()
+
+    def near(col):
+        return {
+            i for i, b in enumerate(bars)
+            if b is not None and abs(b - col) <= DOCK_COL_TOLERANCE
+        }
+
+    found = set()
+    for col in sorted(set(b for b in bars if b is not None)):
+        if col < DOCK_MIN_COLUMN:
+            continue
+        rows = near(col)
+        if len(rows & set(filled)) < DOCK_MIN_SHARE * len(filled):
+            continue
+        if len(rows) < DOCK_MIN_LINES:
+            continue
+        # Only the rows that carry this bar: a corner elsewhere in the paste at the
+        # same column says nothing about whether this column is a frame.
+        lo, hi = max(0, col - DOCK_COL_TOLERANCE), col + DOCK_COL_TOLERANCE + 1
+        if any(c in DOCK_CORNERS for i in rows for c in texts[i][lo:hi]):
+            continue
+        if sum(1 for i in rows if sum(c in DOCK_BARS for c in texts[i]) > 1) >= len(rows) / 2:
+            continue
+        found.add(col)
+    return found
+
+
 GLYPH_STRIP = re.compile(rf"^({S}*)[☐☒◇◆○◐◉↑↓←→↻↯⑂⚑※▶⏸▎✽✻✶✳✢]{S}+")
 GLYPH_ONLY = re.compile(rf"^{S}*[☐☒◇◆○◐◉↑↓←→↻↯⑂⚑※▶⏸]{S}*\Z")
 
@@ -159,6 +211,7 @@ TRAILING_BLANKS = re.compile(r"[ \t]+\Z")
 # reflow (gutter lines suppress re-joining), and reflow before smart quotes.
 RULES = [
     ("ansi-escapes", "Escape sequences and terminal hyperlinks"),
+    ("dock-divider", "Everything right of the dock's divider"),
     ("panel-bleed", "Diff panel text pulled into the copy"),
     ("prompt-lines", "Prompt markers, keeping what you typed"),
     ("chrome-lines", "Interface noise and hint lines"),
@@ -179,7 +232,13 @@ RULE_IDS = [r[0] for r in RULES]
 # Rules that are ours, not the upstream tool's. The differential test disables these
 # so the shared core stays verifiably byte-identical to the reference implementation.
 LOCAL_RULES = frozenset(
-    {"blockquote-bars", "panel-bleed", "prompt-lines", "wrapped-sentences"}
+    {
+        "blockquote-bars",
+        "dock-divider",
+        "panel-bleed",
+        "prompt-lines",
+        "wrapped-sentences",
+    }
 )
 
 # Prose shorter than this is assumed to be a deliberate line break, not a terminal
@@ -221,6 +280,34 @@ def clean(text, disabled=()):
         out = CSI.sub(drop, out)
 
     lines = [Line(t) for t in out.split("\n")]
+
+    if "dock-divider" in on:
+        quoted, inside = [], False
+        for line in lines:
+            quoted.append(inside or bool(FENCE.search(line.text)))
+            if FENCE.search(line.text):
+                inside = not inside
+        columns = dock_columns(
+            ["" if q else ln.text for ln, q in zip(lines, quoted)]
+        )
+        for line, is_quoted in zip(lines, quoted):
+            if is_quoted:
+                continue
+            # Not the line's first bar: a box-drawn prompt in the conversation
+            # column puts its own border ahead of the grip on that row.
+            bars = [i for i, c in enumerate(line.text) if c in DOCK_BARS]
+            near = [
+                (abs(col - bar), bar)
+                for bar in bars
+                for col in columns
+                if abs(col - bar) <= DOCK_COL_TOLERANCE
+            ]
+            if not near:
+                continue
+            bar = min(near)[1]
+            tail = "\r" if line.text.endswith("\r") else ""
+            line.text = js_trim_end(line.text[:bar]) + tail
+            hit("dock-divider")
 
     if "panel-bleed" in on:
         for line in lines:
