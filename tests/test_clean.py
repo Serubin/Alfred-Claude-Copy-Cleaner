@@ -19,7 +19,13 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from clean_claude_text import LOCAL_RULES, RULE_IDS, clean, js_len  # noqa: E402
+from clean_claude_text import (  # noqa: E402
+    LOCAL_RULES,
+    RULE_IDS,
+    clean,
+    dock_columns,
+    js_len,
+)
 
 SCRIPT = ROOT / "src" / "clean_claude_text.py"
 ESC = "\x1b"
@@ -134,6 +140,160 @@ class RuleTests(unittest.TestCase):
     def test_prompt_lines_disabled_matches_upstream(self):
         source = "❯ /tasks-workflow rank the jobs\n⏺ working on it"
         self.assertEqual(clean(source, disabled={"prompt-lines"})[0], "working on it")
+
+    def dock(self, *rows, width=70):
+        """A capture with the dock divider at a fixed column."""
+        for left, _ in rows:
+            assert len(left) <= width, f"{len(left)} > {width}: {left!r}"
+        return "\n".join(f"{left:<{width}}\u2502{right}" for left, right in rows)
+
+    def test_dock_divider_cuts_the_whole_panel_away(self):
+        source = self.dock(
+            ("The reply runs on for a while and wraps the way prose does.", "  src/a.py  +3 -1"),
+            ("", "  src/b.py  +9 -2"),
+            ("A second paragraph, also long enough to be a rejoin candidate.", "  8 tests/generated (show)"),
+            ("", "  \u2193 14 more below (opt+\u2193 to scroll)"),
+        )
+        out, _ = clean(source)
+        for leaked in ("src/a.py", "+9 -2", "tests/generated", "more below", "\u2502"):
+            self.assertNotIn(leaked, out, out)
+        self.assertIn("The reply runs on for a while", out)
+        self.assertIn("A second paragraph", out)
+
+    def test_dock_divider_blanks_a_row_whose_conversation_column_is_empty(self):
+        # Without the cut, BOX_LEFT strips only the divider and promotes the panel's
+        # file row into the conversation column.
+        source = self.dock(
+            ("Some reply text that is long enough to matter to reflow here.", "  src/a.py  +3 -1"),
+            ("", "  vulnerability/vuln-feeds-manager/CLAUDE.md  +2 -2"),
+            ("A second paragraph that must not be welded onto the first one.", "  src/b.py  +9 -2"),
+        )
+        out, _ = clean(source)
+        self.assertNotIn("CLAUDE.md", out, out)
+        self.assertEqual(len(out.split("\n\n")), 2, out)
+
+    def test_dock_divider_survives_a_prompt_box_in_the_conversation(self):
+        # The TUI draws the prompt box with corners in the conversation column. The
+        # corner veto only looks at the divider's own column, so this still cuts.
+        source = self.dock(
+            ("The answer is 42, and here is why that matters.", "  src/a.py  +3 -1"),
+            ("\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e", "  src/b.py  +9 -2"),
+            ("\u2502 > fix the thing \u2502", "  1  func x() {"),
+            ("\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f", "  2    return 1"),
+        )
+        out, _ = clean(source)
+        self.assertNotIn("src/a.py", out, out)
+        self.assertNotIn("func x()", out, out)
+        self.assertIn("fix the thing", out, out)
+
+    def test_dock_divider_tolerates_a_column_off_by_one(self):
+        # A selection that starts mid-line clips the first row, shifting its divider.
+        source = self.dock(
+            ("A reply long enough that reflow would consider joining it onward.", "  src/a.py  +3 -1"),
+            ("A second line of the same reply, also comfortably long enough.", "  src/b.py  +9 -2"),
+            ("A third line of the same reply, still comfortably long enough.", "  src/c.py  +1 -1"),
+        )
+        clipped = source.split("\n")
+        clipped[0] = clipped[0][1:]
+        out, _ = clean("\n".join(clipped))
+        self.assertNotIn("src/a.py", out, out)
+
+    def test_dock_divider_handles_two_columns_in_one_capture(self):
+        # Scrollback keeps the old geometry when the dock is resized mid-session.
+        narrow = self.dock(
+            ("An earlier reply from before the drag.", "  src/a.py  +3 -1"),
+            ("A second line of that earlier reply.", "  src/b.py  +9 -2"),
+            ("A third line of that earlier reply.", "  src/c.py  +1 -1"),
+            width=50,
+        )
+        wide = self.dock(
+            ("A later reply from after the drag, long enough to count here.", "  src/d.py  +4 -0"),
+            ("A second line of the later reply, also long enough to count.", "  src/e.py  +2 -7"),
+            ("A third line of the later reply, also long enough to count.", "  src/f.py  +6 -1"),
+            width=70,
+        )
+        out, _ = clean(narrow + "\n" + wide)
+        for leaked in ("src/a.py", "src/d.py", "+2 -7", "\u2502"):
+            self.assertNotIn(leaked, out, out)
+
+    def test_dock_divider_leaves_a_dialog_alone(self):
+        # A frame's column is closed by corners; the grip's is open.
+        source = (
+            "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n"
+            "\u2502 line one   \u2502\n"
+            "\u2502 line two   \u2502\n"
+            "\u2502 line three \u2502\n"
+            "\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f"
+        )
+        self.assertEqual(dock_columns(source.split("\n")), set())
+        self.assertEqual(clean(source)[0], "line one\nline two\nline three")
+
+    def test_dock_divider_leaves_tree_output_alone(self):
+        # The trunk is teed with ├ and └, so the corner veto rejects it.
+        source = (
+            "src\n"
+            "\u251c\u2500\u2500 api\n"
+            "\u2502   \u251c\u2500\u2500 handlers.go\n"
+            "\u2502   \u2514\u2500\u2500 router.go\n"
+            "\u251c\u2500\u2500 db\n"
+            "\u2502   \u2514\u2500\u2500 seed.go\n"
+            "\u2514\u2500\u2500 main.go"
+        )
+        self.assertEqual(dock_columns(source.split("\n")), set())
+        self.assertIn("handlers.go", clean(source)[0])
+
+    def test_dock_divider_leaves_a_corner_less_table_alone(self):
+        # No corners to veto on, so the repeated-bar gate is what rejects this.
+        source = "\u2502 a \u2502 b \u2502\n\u2502 c \u2502 d \u2502\n\u2502 e \u2502 f \u2502"
+        self.assertEqual(dock_columns(source.split("\n")), set())
+
+    def test_dock_divider_needs_a_run_of_lines(self):
+        source = "plain prose here\n\u2502 one\n\u2502 two\nmore plain prose"
+        self.assertEqual(dock_columns(source.split("\n")), set())
+
+    def test_dock_divider_needs_a_share_of_lines(self):
+        # Three bars clears the line count, so only the share gate can reject this.
+        plain = "a line of ordinary prose that carries no divider at all here"
+        bled = f"{'some ordinary prose':<70}\u2502 src/a.py +3 -1"
+        self.assertEqual(dock_columns([plain] * 7 + [bled] * 3), set())
+        self.assertEqual(dock_columns([plain] * 2 + [bled] * 3), {70})
+
+    def test_dock_divider_leaves_a_one_bar_table_alone(self):
+        # Nothing but the column tells these apart from a dock: one bar per row, no
+        # corners. The grip divides off a sidebar, so it never sits this far left.
+        source = (
+            "Name          \u2502 Value\n"
+            "Alice         \u2502 30\n"
+            "Bob           \u2502 42\n"
+            "Carol         \u2502 17"
+        )
+        self.assertEqual(dock_columns(source.split("\n")), set())
+        self.assertEqual(clean(source)[0], source)
+
+    def test_dock_divider_leaves_a_sliced_tree_alone(self):
+        # A selection taken below the parent branch shows no corner at the trunk.
+        source = "\u2502   \u251c\u2500\u2500 a.go\n\u2502   \u251c\u2500\u2500 b.go\n\u2502   \u2514\u2500\u2500 c.go"
+        self.assertEqual(dock_columns(source.split("\n")), set())
+        self.assertIn("a.go", clean(source)[0])
+
+    def test_dock_divider_leaves_fenced_content_alone(self):
+        # A mock-up pasted inside a fence is quoted text, whatever its geometry.
+        rows = "\n".join(f"{'Sidebar':<70}\u2502 Link {n}" for n in "ABCD")
+        source = f"```\n{rows}\n```"
+        self.assertEqual(clean(source)[0], source)
+
+    def test_dock_divider_ignores_a_corner_elsewhere_in_the_paste(self):
+        # The corner veto asks whether *this* column is a frame, so it reads only the
+        # rows carrying the bar; a stray corner at the same column is unrelated.
+        rows = [f"{f'A reply line number {n}':<70}\u2502  src/{n}.py  +3 -1" for n in range(3)]
+        self.assertEqual(dock_columns(rows), {70})
+        self.assertEqual(dock_columns(rows + [f"{'':<70}\u2514 unrelated"]), {70})
+
+    def test_dock_divider_keeps_crlf_uniform(self):
+        rows = [f"{f'A reply line number {n}':<70}\u2502  src/{n}.py  +3 -1" for n in range(3)]
+        out, _ = clean("\r\n".join(rows) + "\r\n", disabled={"trailing-blanklines"})
+        self.assertNotIn("src/0.py", out, out)
+        self.assertEqual(out.count("\r"), out.count("\n"), repr(out))
 
     def test_panel_bleed_strips_the_diff_panel_empty_state(self):
         # The diff side panel renders to the right of the conversation, so a copy drags

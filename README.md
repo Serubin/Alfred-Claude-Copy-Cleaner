@@ -54,6 +54,7 @@ A notification reports what changed (`Cleaned 42 → 31 lines, 1.4 KB removed`).
 | `ansi-escapes` | Colour/cursor codes and OSC 8 hyperlink wrappers (the link text is kept) |
 | `chrome-lines` | `(esc to interrupt)`, `+47 lines (ctrl+o to expand)`, `? for shortcuts`, spinner lines, the welcome banner |
 | `prompt-lines` † | The `❯` prompt marker, **keeping what you typed**; empty prompts and `❯ 1. Yes, proceed` menu rows still go |
+| `dock-divider` † | Everything right of the dock's `│` divider — the whole docked panel, whatever it is showing |
 | `panel-bleed` † | Diff side-panel text (`No changes this session`, `3 files changed +12 -4`, …) glued to the end of a line |
 | `tool-calls` | `⏺ Read(file.ts)` / `⏺ Bash(npm test)` headers |
 | `message-prefixes` | Leading `⏺` `●` `∙` bullets and `⎿` tool-result markers |
@@ -91,6 +92,49 @@ got for free by deleting the line. The one thing it costs you: a prompt you type
 starting `1. ` or `2) ` reads as a menu row and goes with them. Set `cc_prompt_lines=0`
 for strict upstream behaviour.
 
+`dock-divider` — the TUI's dock is resizable, and the grip that resizes it is drawn as a
+`│` running the dock's full height, on every row including blank ones. That column is the
+boundary between the conversation and whatever panel is docked, so cutting each line at it
+removes the panel wholesale — file rows, `────` separators, diff hunks and all — without
+needing to recognise any of it:
+
+```
+     JOIN (                               │vulnerability/vuln-feeds-manager/FEEDS.md   +19
+         SELECT MIN(ID) AS ID FROM rbs    │↓ 14 more below (opt+↓ to scroll)
+```
+
+The risk of a geometric rule is deleting real text, so a column has to clear five gates
+before anything is cut. It must sit **at least 40 characters** from the left margin — the
+grip divides a sidebar off the conversation, so it is never near the margin, while a
+two-column table's separator and a `tree` trunk are. It must carry a bar on **at least
+half** the non-blank lines and on **at least three** lines outright. No **corner or tee**
+(`╭ ╰ ├ └ ┬ ┼` …) may sit at that column — a frame's column is closed and a `tree`
+trunk's is teed, while the grip's is open. And **fewer than half** its lines may carry a
+second bar, since a frame or table repeats bars across a row where the grip is a single
+rule. Together these leave `tree` output, box-drawn dialogs and `│`-delimited tables
+untouched, whether or not they have an outer border.
+
+Fenced blocks are skipped outright. A mock-up pasted inside a code fence is quoted text
+however table-shaped it looks, and the fence tracking further down this pipeline is
+indexed against lines this rule runs before, so it does its own pass.
+
+Both the corner check and the bar counting read only the rows carrying the candidate bar,
+not the whole paste. The TUI draws the prompt box with corners in the *conversation*
+column, so a wider check would veto the common case; and a stray corner at the same
+column elsewhere says nothing about whether this column is a frame. For the same reason
+the cut takes whichever bar is nearest the divider rather than the line's first: a
+box-drawn prompt puts its own border ahead of the grip on that row.
+
+Matching allows two columns of slack, which absorbs a selection that starts mid-line, a
+double-width glyph nudging a row, and a dock resized mid-session — scrollback keeps the
+old geometry, so one paste can genuinely hold two divider columns, and each is cut
+independently. Columns are counted in characters rather than display cells, so a run of
+wide characters in the conversation can still push a row out of tolerance and leave it
+uncut. Set `cc_dock_divider=0` to turn the rule off.
+
+A selection taken entirely from inside the panel has no divider in it, and nothing here
+fires; `panel-bleed` below covers the part of that case it can.
+
 `panel-bleed` — the diff side panel renders to the *right* of the conversation column,
 so copying a region drags the panel's text onto the end of whatever line it happened to
 sit beside, behind the right-align gap:
@@ -108,8 +152,9 @@ two or more spaces are required, so a bare `No commits yet` inside a pasted `git
 transcript survives and prose is only at risk when it ends in one of these phrases
 behind a column-width gap.
 
-Panel *content* is out of scope: when the panel actually has changes it bleeds file rows
-and diff hunks onto every adjacent line, and no phrase list can catch those. Set
+This is the fallback for captures with no divider in them — older versions of the TUI,
+which drew none, and selections taken from inside the panel. Where a divider *is* present,
+`dock-divider` above has already removed the panel and this rule finds nothing to do. Set
 `cc_panel_bleed=0` to turn the rule off.
 
 `wrapped-sentences` — `reflow` refuses to join across a full stop, on the reasonable
