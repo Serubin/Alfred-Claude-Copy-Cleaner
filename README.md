@@ -190,9 +190,16 @@ from the tag; local builds fall back to `VERSION`, so ordinary builds never chur
 `workflow_dispatch` runs the same pipeline without publishing, uploading the built
 workflow as a run artifact — useful for checking the pipeline itself.
 
-CI runs on Linux, where the integration tests stub the macOS clipboard and run the
-action body under Linux zsh. That verifies logic, not the real macOS surface, so
-**run `./test.sh` on your Mac before tagging** — that is the authoritative check.
+### CI
+
+`.github/workflows/ci.yml` runs on every push to `main` and every PR, on Linux and on
+macOS with Apple's `/usr/bin/python3` (the interpreter the workflow runs under). It
+checks that `src/info.plist` matches `tools/make_plist.py`, runs `./test.sh`, builds
+the workflow, and fails if anything stray in `src/` would end up in the package. The
+release workflow runs the same job before it builds.
+
+The integration tests stub `pbcopy`/`pbpaste`, so CI never touches a real clipboard
+or Alfred itself — try the built workflow once by hand before tagging.
 
 ## Relationship to the original tool
 
