@@ -1,11 +1,8 @@
 name: CI
 
 # Tests and packages every change on Linux and on macOS with Apple's system Python,
-# the interpreter the shipped workflow actually runs under. release.yml calls this too.
+# the interpreter the shipped workflow actually runs under. Main runs it via snapshot.yml.
 on:
-  push:
-    branches:
-      - main
   pull_request:
   workflow_dispatch:
   workflow_call:
@@ -14,8 +11,8 @@ permissions:
   contents: read
 
 concurrency:
-  # When called from release.yml, github.workflow is "Release", keeping this group apart
-  # from both normal CI runs and the caller's own release-<ref> group.
+  # When called, github.workflow is the caller's name, keeping this group apart from
+  # both normal CI runs and the caller's own group.
   group: ${{ github.workflow }}-ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 

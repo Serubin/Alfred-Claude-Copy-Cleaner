@@ -215,7 +215,8 @@ implementation additionally needs node — see
 
 ### Cutting a release
 
-`.github/workflows/release.yml` builds and publishes on any `v*` tag:
+`.github/workflows/release.yml` builds on any `v*` tag and attaches the workflow and
+its `.sha256` to a **draft** release:
 
 ```sh
 # 1. bump VERSION in the same commit you intend to tag
@@ -224,24 +225,36 @@ git commit -am "Release 1.1.0"
 
 # 2. tag and push
 git tag v1.1.0 && git push origin main --tags
+
+# 3. review the draft (notes are generated from merged PRs), then publish it
+gh release view v1.1.0 --web
 ```
 
-The workflow refuses to publish if the tag and `VERSION` disagree — that check exists
+Re-pushing a tag whose release is still a draft replaces the draft's assets but keeps
+its notes; the job refuses to touch a release that is already published.
+
+The workflow refuses to build a release if the tag and `VERSION` disagree — that check exists
 so a release can't ship a workflow whose Alfred-visible version says something else.
 The version reaches the plist through `WORKFLOW_VERSION`, which the release job sets
 from the tag; local builds fall back to `VERSION`, so ordinary builds never churn
 `src/info.plist`.
 
-`workflow_dispatch` runs the same pipeline without publishing, uploading the built
-workflow as a run artifact — useful for checking the pipeline itself.
+`workflow_dispatch` runs the same pipeline without drafting a release, uploading the
+built workflow as a run artifact — useful for checking the pipeline itself.
 
 ### CI
 
-`.github/workflows/ci.yml` runs on every push to `main` and every PR, on Linux and on
-macOS with Apple's `/usr/bin/python3` (the interpreter the workflow runs under). It
-checks that `src/info.plist` matches `tools/make_plist.py`, runs `./test.sh`, builds
-the workflow, and fails if anything stray in `src/` would end up in the package. The
-release workflow runs the same job before it builds.
+`.github/workflows/ci.yml` runs on every PR, on Linux and on macOS with Apple's
+`/usr/bin/python3` (the interpreter the workflow runs under). It checks that
+`src/info.plist` matches `tools/make_plist.py`, runs `./test.sh`, builds the workflow,
+and fails if anything stray in `src/` would end up in the package. The snapshot and
+release workflows run the same checks before they build.
+
+`.github/workflows/snapshot.yml` runs on every push to `main` (or by hand from the
+Actions tab) and packages a snapshot, versioned `<VERSION>+snapshot.<sha>` so Alfred
+shows which commit it came from. It is kept for
+90 days as the run's `alfredworkflow-…` artifact: a zip holding the `.alfredworkflow`
+and its `.sha256`. `tools/package.sh <version>` produces the same files locally.
 
 The integration tests stub `pbcopy`/`pbpaste`, so CI never touches a real clipboard
 or Alfred itself — try the built workflow once by hand before tagging.

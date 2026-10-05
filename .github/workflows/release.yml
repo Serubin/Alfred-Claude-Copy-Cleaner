@@ -1,8 +1,7 @@
 name: Release
 
-# Pushing a tag like v1.2.3 runs CI (ci.yml), then builds and publishes the .alfredworkflow.
-# workflow_dispatch runs everything except the publish step, so the pipeline can be
-# exercised without minting a release.
+# A v1.2.3 tag runs CI (ci.yml), then attaches the .alfredworkflow to a draft release.
+# workflow_dispatch is a dry run: it uploads a run artifact instead of drafting.
 on:
   push:
     tags:
@@ -26,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: write # create the release and upload assets
+      contents: write # create the draft release and upload assets
 
     steps:
       - name: Check out
@@ -63,37 +62,14 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Build workflow
-        env:
-          WORKFLOW_VERSION: ${{ steps.version.outputs.version }}
-        run: ./build.sh
-
-      - name: Verify artifact
+      - name: Package workflow
         id: artifact
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          built="dist/Claude Code Paste Cleaner.alfredworkflow"
-          asset="dist/Claude-Code-Paste-Cleaner-${VERSION}.alfredworkflow"
-
-          # build.sh already asserts info.plist sits at the archive root; this checks
-          # the shipped plist actually carries the version being released, which is
-          # what Alfred shows in its workflow list.
-          embedded="$(unzip -p "$built" info.plist \
-            | python3 -c 'import plistlib,sys; print(plistlib.loads(sys.stdin.buffer.read())["version"])')"
-          if [ "$embedded" != "$VERSION" ]; then
-            echo "::error::Built workflow reports version $embedded, expected $VERSION."
-            exit 1
-          fi
-
-          # GitHub turns spaces in asset names into dots; name it explicitly instead.
-          mv "$built" "$asset"
-          ( cd dist && sha256sum "$(basename "$asset")" > "$(basename "$asset").sha256" )
-
+          asset="$(tools/package.sh "$VERSION" | tail -n 1)"
           echo "asset=$asset" >> "$GITHUB_OUTPUT"
-          echo "Built $asset ($(du -h "$asset" | cut -f1))"
-          cat "$asset.sha256"
 
       - name: Upload dry-run artifact
         if: steps.version.outputs.publish != 'true'
@@ -103,17 +79,34 @@ jobs:
           path: dist/
           if-no-files-found: error
 
-      - name: Publish release
+      - name: Create or update draft release
         if: steps.version.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ steps.version.outputs.tag }}
           ASSET: ${{ steps.artifact.outputs.asset }}
         run: |
           set -euo pipefail
-          # --generate-notes works out the previous tag on its own.
-          gh release create "$TAG" \
-            --title "$TAG" \
-            --generate-notes \
-            "$ASSET" "$ASSET.sha256"
-          echo "::notice::Published $TAG"
+          # The tags/ endpoint skips drafts, so search the full list.
+          matches="$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
+            --jq '.[] | select(.tag_name == env.TAG) | {draft, html_url} | @json')"
+          count="$(printf '%s' "$matches" | grep -c . || true)"
+
+          if [ "$count" -eq 0 ]; then
+            # --generate-notes works out the previous tag on its own.
+            url="$(gh release create "$TAG" --draft --verify-tag \
+              --title "$TAG" \
+              --generate-notes \
+              "$ASSET" "$ASSET.sha256")"
+          elif [ "$count" -gt 1 ]; then
+            echo "::error::$count releases exist for $TAG; delete the stale drafts and re-run."
+            exit 1
+          elif [ "$(jq -r .draft <<< "$matches")" = "true" ]; then
+            gh release upload "$TAG" --clobber "$ASSET" "$ASSET.sha256"
+            url="$(jq -r .html_url <<< "$matches")"
+          else
+            echo "::error::$TAG is already published; refusing to replace its assets."
+            exit 1
+          fi
+          echo "::notice::Draft release for $TAG is ready to review: $url"
