@@ -1,0 +1,54 @@
+name: Snapshot
+
+# Every push to main runs CI (ci.yml), then uploads the .alfredworkflow as a run artifact.
+# workflow_dispatch builds one on demand from any branch.
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: snapshot-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  snapshot:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out
+        # Pinned to a commit rather than a tag: a tag can be moved.
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends zip unzip
+
+      - name: Package snapshot
+        id: package
+        run: |
+          set -euo pipefail
+          # Build metadata, not a prerelease: -snapshot would sort before VERSION.
+          version="$(tr -d '[:space:]' < VERSION)+snapshot.${GITHUB_SHA::7}"
+          tools/package.sh "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Upload snapshot
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: alfredworkflow-${{ steps.package.outputs.version }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 90
